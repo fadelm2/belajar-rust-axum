@@ -149,6 +149,7 @@ dependencies = [
  "axum-extra",
  "axum-test",
  "http",
+ "log",
  "serde",
  "tokio",
  "tower",
