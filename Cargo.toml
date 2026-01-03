@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 axum = { version = "0.8.8", features = ["multipart"] }
-axum-extra = "0.12.5"
+axum-extra = { version = "0.12.5", features = ["cookie"] }
 axum-test = "18.5.0"
 http = "1.4.0"
 serde = { version = "1.0.228", features = ["derive"] }
