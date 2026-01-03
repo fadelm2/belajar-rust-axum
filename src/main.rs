@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use axum::{serve, Json, Router};
-use axum::body::Body;
-use axum::extract::{Path, Query, Request};
+use axum::{serve, Form, Json, Router};
+use axum::body::{Body, Bytes};
+use axum::extract::{ Multipart ,Path, Query, Request};
 use axum::extract::rejection::JsonRejection;
 use axum::routing::{get, post};
 use axum_test::TestServer;
@@ -10,6 +10,7 @@ use tokio::net::TcpListener;
 use serde::{Deserialize, Serialize};
 use log::{error, Log};
 use axum::response::{IntoResponse, Response};
+use axum_test::multipart::{MultipartForm, Part};
 
 #[tokio::main]
 async fn main() {
@@ -254,4 +255,100 @@ async fn test_response_json() {
 }
 
 
+#[tokio::test]
+async fn test_response_tupple() {
+    async fn hello_world() -> (Response<()>, Json<LoginResponse>) {
+        ( Response::builder()
+              .status(StatusCode::OK)
+              .header("X-Owner", "Fadel")
+              .body(())
+              .unwrap(),
+          Json(LoginResponse{
+              token: "token".to_string(),
+          }),
+        )
+    }
+
+    let app = Router::new().route("/get", get(hello_world));
+
+    let server = TestServer::new(app).unwrap();
+    let response = server.get("/get").await;
+    response.assert_status_ok();
+    response.assert_text("{\"token\":\"token\"}");
+    response.assert_header("X-Owner", "Fadel");
+}
+
+
+#[tokio::test]
+async fn test_response_tupple3() {
+    async fn hello_world() -> (StatusCode, HeaderMap, Json<LoginResponse>) {
+        let mut header = HeaderMap::new();
+        header.insert("X-Owner", "Fadel".parse().unwrap());
+
+        ( StatusCode::OK,
+          header,
+          Json(LoginResponse{
+              token: "token".to_string(),
+          }),
+        )
+    }
+
+    let app = Router::new().route("/get", get(hello_world));
+
+    let server = TestServer::new(app).unwrap();
+    let response = server.get("/get").await;
+    response.assert_status_ok();
+    response.assert_text("{\"token\":\"token\"}");
+    response.assert_header("X-Owner", "Fadel");
+}
+
+#[tokio::test]
+async fn test_form() {
+    async fn hello_world(Form(request): Form<LoginRequest>) -> String {
+        format!("Hello {}", request.username)
+    }
+
+    let app = Router::new().route("/post", post(hello_world));
+
+    let request = LoginRequest {
+        username: "Fadel".to_string(),
+        password: "<PASSWORD>".to_string(),
+    };
+    let server = TestServer::new(app).unwrap();
+    let response = server.post("/post").form(&request).await;
+    response.assert_status_ok();
+    response.assert_text("Hello Fadel");
+}
+
+#[tokio::test]
+async fn test_multipart() {
+    async fn hello_world(mut payload: Multipart) -> String {
+        let mut profile: Bytes = Bytes::new();
+        let mut username: String = "".to_string();
+
+        while let Some(field) = payload.next_field().await.unwrap() {
+            if field.name().unwrap_or("") == "profile" {
+                profile = field.bytes().await.unwrap()
+            } else if field.name().unwrap_or("") == "username" {
+                username = field.text().await.unwrap()
+            }
+        }
+
+        assert!(profile.len() > 0);
+        format!("Hello {}", username)
+
+    }
+
+    let app = Router::new().route("/post", post(hello_world));
+
+    let request = MultipartForm::new()
+        .add_text("username", "Eko")
+        .add_text("password", "rahasia")
+        .add_part("profile", Part::bytes(Bytes::from("Contoh")));
+
+    let server = TestServer::new(app).unwrap();
+    let response = server.post("/post").multipart(request).await;
+    response.assert_status_ok();
+    response.assert_text("Hello Eko");
+}
 
